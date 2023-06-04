@@ -1,19 +1,21 @@
 use anyhow::Result;
-use std::str::FromStr;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let client_key = sentry::types::Dsn::from_str("https://03a10f4aff7d4891bbdbdcacaea2586d@o4505267115982848.ingest.sentry.io/4505267128041472")?;
-    let _ = sentry::init(sentry::ClientOptions {
-        dsn: Some(client_key),
-        ..Default::default()
-    });
+    let opt = Opt::parse();
+    let _guard = sentry::init((
+        opt.client_key,
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
 
     loop {
-        let url = "https://dragondev-keeper.sandbox.levana.finance/status";
         let http_client = reqwest::Client::new();
         match http_client
-            .get(url)
+            .get(&opt.url)
             .header("accept", "text/html")
             .send()
             .await
@@ -42,6 +44,19 @@ async fn main() -> Result<()> {
             }
         }
 
-        let _ = tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        let _ = tokio::time::sleep(tokio::time::Duration::from_millis(opt.interval)).await;
     }
+}
+
+#[derive(Parser, Debug)]
+struct Opt {
+    /// Sentry client key
+    #[arg(short, long, env = "SENTRY_KEY")]
+    client_key: String,
+    /// Watch interval (ms)
+    #[arg(short, long)]
+    interval: u64,
+    /// Status endpoint
+    #[arg(short, long)]
+    url: String,
 }
