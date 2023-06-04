@@ -1,8 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let opt = Opt::parse();
     let _guard = sentry::init((
         opt.client_key,
@@ -11,21 +10,20 @@ async fn main() -> Result<()> {
             ..Default::default()
         },
     ));
+    let http_client = reqwest::blocking::Client::new();
 
     loop {
-        let http_client = reqwest::Client::new();
         match http_client
             .get(&opt.url)
             .header("accept", "text/html")
             .send()
-            .await
         {
             Err(e) => {
                 eprintln!("{e:?}");
                 sentry::capture_error(&e);
             }
             Ok(response) => {
-                let status_page = response.text().await?;
+                let status_page = response.text()?;
                 let xdoc = sxd_html::parse_html(&status_page);
                 let xdoc = xdoc.as_document();
 
@@ -44,7 +42,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        let _ = tokio::time::sleep(tokio::time::Duration::from_millis(opt.interval)).await;
+        std::thread::sleep(std::time::Duration::from_millis(opt.interval));
     }
 }
 

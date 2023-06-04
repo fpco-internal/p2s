@@ -8,8 +8,10 @@ sentry = { version = "*", default-features = false, features = [
     "reqwest",
     "rustls",
 ] }
-reqwest = { version = "*", default-features = false, features = ["rustls"] }
-tokio = { version = "*", features = ["full"] }
+reqwest = { version = "*", default-features = false, features = [
+    "rustls",
+    "blocking",
+] }
 anyhow = "*"
 sxd-xpath = "*"
 sxd_html = "*"
