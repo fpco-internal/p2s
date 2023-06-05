@@ -11,6 +11,10 @@ fn main() -> Result<()> {
         },
     ));
     let http_client = reqwest::blocking::Client::new();
+    let xpath_factory = sxd_xpath::Factory::new();
+    let h2 = xpath_factory.build("//h2/text()")?.unwrap();
+    let pre = xpath_factory.build("//pre/text()")?.unwrap();
+    let context = sxd_xpath::Context::new();
 
     loop {
         match http_client
@@ -20,7 +24,10 @@ fn main() -> Result<()> {
         {
             Err(e) => {
                 eprintln!("{e:?}");
-                sentry::capture_error(&e);
+                sentry::capture_message(
+                    &format!("Fetching status page error: {e:?}"),
+                    sentry::Level::Error,
+                );
             }
             Ok(response) => {
                 let status_page = response.text()?;
@@ -28,17 +35,33 @@ fn main() -> Result<()> {
                 let xdoc = xdoc.as_document();
 
                 let matches = sxd_xpath::evaluate_xpath(
-            &xdoc,
-            "/html/body/div/div/div/div/p[starts-with(text(), 'Status: ERROR')]/../pre/text()",
-        )?;
+                    &xdoc,
+                    "/html/body/div/div/div/div/p[starts-with(text(), 'Status: ERROR')]/..",
+                )?;
                 if let sxd_xpath::Value::Nodeset(nodes) = matches {
                     for i in nodes {
-                        let msg = i.string_value();
-                        eprintln!("{msg}");
-                        sentry::capture_message(&msg, sentry::Level::Error);
+                        let title =
+                            if let sxd_xpath::Value::Nodeset(h2s) = h2.evaluate(&context, i)? {
+                                h2s.iter()
+                                    .next()
+                                    .map(|x| x.string_value())
+                                    .unwrap_or_default()
+                            } else {
+                                "".to_string()
+                            };
+                        let msg =
+                            if let sxd_xpath::Value::Nodeset(pres) = pre.evaluate(&context, i)? {
+                                pres.iter()
+                                    .next()
+                                    .map(|x| x.string_value())
+                                    .unwrap_or_default()
+                            } else {
+                                "".to_string()
+                            };
+                        eprintln!("{title}: {msg}");
+                        sentry::capture_message(&format!("{title}: {msg}"), sentry::Level::Error);
                     }
                 }
-                //     "/html/body/div/div/div/div/p[starts-with(text(), 'Status: SUCCESS')]/../pre/text()",
             }
         }
 
