@@ -25,7 +25,7 @@ fn main() -> Result<()> {
             Err(e) => {
                 eprintln!("{e:?}");
                 sentry::capture_message(
-                    &format!("Fetching status page error: {e:?}"),
+                    &format!("{}: Fetching status page error: {e:?}", opt.bot_name),
                     sentry::Level::Error,
                 );
             }
@@ -59,7 +59,10 @@ fn main() -> Result<()> {
                                 "".to_string()
                             };
                         eprintln!("{title}: {msg}");
-                        sentry::capture_message(&format!("{title}: {msg}"), sentry::Level::Error);
+                        sentry::capture_message(
+                            &format!("{}: {title}: {msg}", opt.bot_name),
+                            sentry::Level::Error,
+                        );
                     }
                 }
             }
@@ -80,4 +83,7 @@ struct Opt {
     /// Status endpoint
     #[arg(short, long)]
     url: String,
+    /// Bot name
+    #[arg(short, long)]
+    bot_name: String,
 }
