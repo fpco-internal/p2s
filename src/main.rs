@@ -1,6 +1,7 @@
+use std::collections::HashSet;
+
 use anyhow::Result;
 use clap::Parser;
-use sentry::with_scope;
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
@@ -17,6 +18,7 @@ fn main() -> Result<()> {
     let h2 = xpath_factory.build("//h2/text()")?.unwrap();
     let pre = xpath_factory.build("//pre/text()")?.unwrap();
     let context = sxd_xpath::Context::new();
+    let mut states: HashSet<(String, String)> = HashSet::new();
 
     loop {
         match http_client
@@ -41,18 +43,21 @@ fn main() -> Result<()> {
                     "/html/body/div/div/div/div/p[starts-with(text(), 'Status: ERROR')]/..",
                 )?;
                 if let sxd_xpath::Value::Nodeset(nodes) = matches {
-                    for i in nodes {
-                        let title =
-                            if let sxd_xpath::Value::Nodeset(h2s) = h2.evaluate(&context, i)? {
-                                h2s.iter()
-                                    .next()
-                                    .map(|x| x.string_value())
-                                    .unwrap_or_default()
-                            } else {
-                                "".to_string()
-                            };
-                        let msg =
-                            if let sxd_xpath::Value::Nodeset(pres) = pre.evaluate(&context, i)? {
+                    let errors: HashSet<(String, String)> = nodes
+                        .iter()
+                        .map(|i| {
+                            let title =
+                                if let sxd_xpath::Value::Nodeset(h2s) = h2.evaluate(&context, i)? {
+                                    h2s.iter()
+                                        .next()
+                                        .map(|x| x.string_value())
+                                        .unwrap_or_default()
+                                } else {
+                                    "".to_string()
+                                };
+                            let msg = if let sxd_xpath::Value::Nodeset(pres) =
+                                pre.evaluate(&context, i)?
+                            {
                                 pres.iter()
                                     .next()
                                     .map(|x| x.string_value())
@@ -60,9 +65,15 @@ fn main() -> Result<()> {
                             } else {
                                 "".to_string()
                             };
-                        eprintln!("{title}: {msg}");
-                        with_scope(
-                            |scope| scope.set_tag("part-name", &title),
+                            eprintln!("{title}: {msg}");
+                            Ok((title, msg))
+                        })
+                        .collect::<Result<_>>()?;
+
+                    // New errors
+                    for (title, msg) in errors.difference(&states) {
+                        sentry::with_scope(
+                            |scope| scope.set_tag("part-name", title),
                             || {
                                 sentry::capture_message(
                                     &format!("{title}: {msg}"),
@@ -71,6 +82,20 @@ fn main() -> Result<()> {
                             },
                         );
                     }
+                    // Gone errors
+                    for (title, msg) in states.difference(&errors) {
+                        sentry::with_scope(
+                            |scope| scope.set_tag("part-name", title),
+                            || {
+                                sentry::capture_message(
+                                    &format!("Recoverred {title}: {msg}"),
+                                    sentry::Level::Info,
+                                )
+                            },
+                        );
+                    }
+
+                    states = errors;
                 }
             }
         }
