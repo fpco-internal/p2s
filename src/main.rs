@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use sentry::with_scope;
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
@@ -10,6 +11,7 @@ fn main() -> Result<()> {
             ..Default::default()
         },
     ));
+    sentry::configure_scope(|scope| scope.set_tag("bot-name", &opt.bot_name));
     let http_client = reqwest::blocking::Client::new();
     let xpath_factory = sxd_xpath::Factory::new();
     let h2 = xpath_factory.build("//h2/text()")?.unwrap();
@@ -25,7 +27,7 @@ fn main() -> Result<()> {
             Err(e) => {
                 eprintln!("{e:?}");
                 sentry::capture_message(
-                    &format!("{}: Fetching status page error: {e:?}", opt.bot_name),
+                    &format!("Fetching status page error: {e:?}"),
                     sentry::Level::Error,
                 );
             }
@@ -59,9 +61,14 @@ fn main() -> Result<()> {
                                 "".to_string()
                             };
                         eprintln!("{title}: {msg}");
-                        sentry::capture_message(
-                            &format!("{}: {title}: {msg}", opt.bot_name),
-                            sentry::Level::Error,
+                        with_scope(
+                            |scope| scope.set_tag("part-name", &title),
+                            || {
+                                sentry::capture_message(
+                                    &format!("{title}: {msg}"),
+                                    sentry::Level::Error,
+                                )
+                            },
                         );
                     }
                 }
