@@ -573,7 +573,7 @@ checksum = "9670a07f94779e00908f3e686eab508878ebb390ba6e604d3a284c00e8d0487b"
 
 [[package]]
 name = "p2s"
-version = "2023.6.4"
+version = "2023.6.6"
 dependencies = [
  "anyhow",
  "clap",

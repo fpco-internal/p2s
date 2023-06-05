@@ -1,6 +1,6 @@
 [package]
 name = "p2s"
-version = "2023.6.4"
+version = "2023.6.6"
 edition = "2021"
 
 [dependencies]
@@ -16,3 +16,9 @@ anyhow = "*"
 sxd-xpath = "*"
 sxd_html = "*"
 clap = { version = "*", features = ["derive", "env"] }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+panic = "abort"
